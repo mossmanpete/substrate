@@ -89,7 +89,7 @@ use client::{
 };
 use client::blockchain::HeaderBackend;
 use codec::{Encode, Decode};
-use consensus_common::{BlockImport, Error as ConsensusError, ErrorKind as ConsensusErrorKind, ImportBlock, ImportResult, Authorities};
+use consensus_common::{BlockImport, Error as ConsensusError, ErrorKind as ConsensusErrorKind, ImportBlock, ImportResult};
 use runtime_primitives::traits::{
 	NumberFor, Block as BlockT, Header as HeaderT, DigestFor, ProvideRuntimeApi, Hash as HashT,
 	DigestItemFor, DigestItem, As, Zero,
@@ -1148,19 +1148,6 @@ fn canonical_at_height<B, E, Block: BlockT<Hash=H256>, RA>(
 	}
 
 	Ok(Some(current.hash()))
-}
-
-impl<B, E, Block: BlockT<Hash=H256>, RA, PRA> Authorities<Block> for GrandpaBlockImport<B, E, Block, RA, PRA>
-where
-	B: Backend<Block, Blake2Hasher> + 'static,
-	E: CallExecutor<Block, Blake2Hasher> + 'static + Clone + Send + Sync,
-	DigestItemFor<Block>: DigestItem<AuthorityId=Ed25519AuthorityId>,
-{
-
-	type Error = <Client<B, E, Block, RA> as Authorities<Block>>::Error;
-	fn authorities(&self, at: &BlockId<Block>) -> Result<Vec<Ed25519AuthorityId>, Self::Error> {
-		self.inner.authorities_at(at)
-	}
 }
 
 impl<B, E, Block: BlockT<Hash=H256>, RA, PRA> ProvideRuntimeApi for GrandpaBlockImport<B, E, Block, RA, PRA>

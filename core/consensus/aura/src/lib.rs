@@ -61,7 +61,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use codec::Encode;
-use consensus_common::{Authorities, BlockImport, Environment, Error as ConsensusError, Proposer, ForkChoiceStrategy};
+use consensus_common::{BlockImport, Environment, Error as ConsensusError, Proposer, ForkChoiceStrategy};
 use consensus_common::import_queue::{Verifier, BasicQueue};
 use client::ChainHead;
 use client::block_builder::api::BlockBuilder as BlockBuilderApi;
@@ -162,11 +162,11 @@ pub fn start_aura_thread<B, C, E, I, SO, Error>(
 	on_exit: impl Future<Item=(),Error=()> + Send + 'static,
 ) where
 	B: Block + 'static,
-	C: Authorities<B> + ChainHead<B> + Send + Sync + 'static,
+	C: ChainHead<B> + Send + Sync + 'static,
 	E: Environment<B, AuraConsensusData, Error=Error> + Send + Sync + 'static,
 	E::Proposer: Proposer<B, AuraConsensusData, Error=Error> + 'static,
 	I: BlockImport<B> + Send + Sync + 'static,
-	Error: From<C::Error> + From<I::Error> + 'static,
+	Error: From<I::Error> + 'static,
 	SO: SyncOracle + Send + Clone + 'static,
 	DigestItemFor<B>: CompatibleDigestItem + DigestItem<AuthorityId=Ed25519AuthorityId> + 'static,
 	Error: ::std::error::Error + Send + From<::consensus_common::Error> + 'static,
@@ -205,11 +205,11 @@ pub fn start_aura<B, C, E, I, SO, Error>(
 	on_exit: impl Future<Item=(),Error=()>,
 ) -> impl Future<Item=(),Error=()> where
 	B: Block,
-	C: Authorities<B> + ChainHead<B>,
+	C: ChainHead<B> + ProvideRuntimeApi,
 	E: Environment<B, AuraConsensusData, Error=Error>,
 	E::Proposer: Proposer<B, AuraConsensusData, Error=Error>,
 	I: BlockImport<B>,
-	Error: From<C::Error> + From<I::Error>,
+	Error: From<I::Error>,
 	SO: SyncOracle + Send + Clone,
 	DigestItemFor<B>: CompatibleDigestItem + DigestItem<AuthorityId=Ed25519AuthorityId>,
 	Error: ::std::error::Error + Send + 'static + From<::consensus_common::Error>,
@@ -250,7 +250,9 @@ pub fn start_aura<B, C, E, I, SO, Error>(
 					}
 				};
 
-				let authorities = match client.authorities(&BlockId::Hash(chain_head.hash())) {
+				let authorities = match consensus_common::authorities(
+					client.as_ref(),
+					&BlockId::Hash(chain_head.hash())) {
 					Ok(authorities) => authorities,
 					Err(e) => {
 						warn!("Unable to fetch authorities at\
@@ -451,7 +453,7 @@ impl<B: Block> ExtraVerification<B> for NothingExtra {
 }
 
 impl<B: Block, C, E, MakeInherent, Inherent> Verifier<B> for AuraVerifier<C, E, MakeInherent> where
-	C: Authorities<B> + BlockImport<B> + ProvideRuntimeApi + Send + Sync,
+	C: BlockImport<B> + ProvideRuntimeApi + Send + Sync,
 	C::Api: BlockBuilderApi<B, Inherent>,
 	DigestItemFor<B>: CompatibleDigestItem + DigestItem<AuthorityId=Ed25519AuthorityId>,
 	E: ExtraVerification<B>,
@@ -471,7 +473,9 @@ impl<B: Block, C, E, MakeInherent, Inherent> Verifier<B> for AuraVerifier<C, E, 
 			.ok_or("System time is before UnixTime?".to_owned())?;
 		let hash = header.hash();
 		let parent_hash = *header.parent_hash();
-		let authorities = self.client.authorities(&BlockId::Hash(parent_hash))
+		let authorities = consensus_common::authorities(
+			&self.client,
+			&BlockId::Hash(parent_hash))
 			.map_err(|e| format!("Could not fetch authorities at {:?}: {:?}", parent_hash, e))?;
 
 		let extra_verification = self.extra.verify(
@@ -605,7 +609,7 @@ pub fn import_queue<B, C, E, MakeInherent, Inherent>(
 	make_inherent: MakeInherent,
 ) -> AuraImportQueue<B, C, E, MakeInherent> where
 	B: Block,
-	C: Authorities<B> + BlockImport<B,Error=ConsensusError> + ProvideRuntimeApi + Send + Sync,
+	C: BlockImport<B,Error=ConsensusError> + ProvideRuntimeApi + Send + Sync,
 	C::Api: BlockBuilderApi<B, Inherent>,
 	DigestItemFor<B>: CompatibleDigestItem + DigestItem<AuthorityId=Ed25519AuthorityId>,
 	E: ExtraVerification<B>,
